@@ -72,10 +72,10 @@ for idx in indices:
         eventsum['visible_energy'] = eventsum['tot_visible_energy_rop2'] + eventsum['tot_visible_energy_rop3']
 
         print("\n" + f"generating central APA efficiencies for {part} chunk {idx}")
-        cTPs, cTAs = GenerateTAs(tps, add_backgrounds=True)
+        cTPs, cTAs = GenerateTAs(tps)
 
         print("\n" + f"generating lateral APA efficiencies for {part} chunk {idx}")
-        lTPs, lTAs = GenerateTAs(tps, add_backgrounds=True, **lat_params)
+        lTPs, lTAs = GenerateTAs(tps, **lat_params)
 
         trig_cent = pd.merge(
             cTAs,

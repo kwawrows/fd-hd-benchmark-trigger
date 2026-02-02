@@ -175,8 +175,8 @@ def TAMaker(data,
     df = df[df.readout_view == 2].copy()
     df["time_start"] /= 32
     df["tpc"] = get_tpcid(df.TPCSetID.to_numpy(), df.readout_plane_id.to_numpy())
-    df["apa_id"] = df.TPCSetID.to_numpy() #here  
-    df["rop"] =  df.readout_plane_id.to_numpy() #here  
+    df["apa_id"] = df.TPCSetID.to_numpy()   
+    df["rop"] =  df.readout_plane_id.to_numpy()   
 
     # binning and energy estimation 
     bins = np.arange(0, 6000 + 1, window_size)
@@ -201,13 +201,13 @@ def TAMaker(data,
 
     for _, row in immediate_accept.iterrows():
         hits = grouped_hits[(row.event, row.tpc, row.bin)]
-        moments = tp_moments(ch = hits["channel"].to_numpy(), t = hits["time_start"].to_numpy(), q = hits["adc_integral"].to_numpy()) #here 
+        moments = tp_moments(ch = hits["channel"].to_numpy(), t = hits["time_start"].to_numpy(), q = hits["adc_integral"].to_numpy())  
 
         results.append({
             "event": row.event,
-            "apa_id": row.apa_id, #here 
+            "apa_id": row.apa_id,  
             "tpc": row.tpc,
-            "rop": row.rop, #here 
+            "rop": row.rop,  
             "window_start": row.bin * window_size,
             "flag": row.flag,
             "TA_id": row.TA_id,
@@ -217,7 +217,7 @@ def TAMaker(data,
             "mean_cluster_energy": -1,
             "total_cluster_energy": -1,
             "max_cluster_energy": -1,
-            **moments #here
+            **moments 
         })
 
     # DBSCAN for inspect windows
@@ -241,9 +241,9 @@ def TAMaker(data,
         return {
             "summary": {
                 "event": row.event,
-                "apa_id": row.apa_id, #here 
+                "apa_id": row.apa_id,  
                 "tpc": row.tpc,
-                "rop": row.rop, #here 
+                "rop": row.rop,  
                 "window_start": row.bin * window_size,
                 "flag": flag,
                 "TA_id": row.TA_id,
@@ -253,7 +253,7 @@ def TAMaker(data,
                 "mean_cluster_energy": mean_cl,
                 "total_cluster_energy": tot_cl,
                 "max_cluster_energy": max_cl,
-                **moments  #here 
+                **moments   
             },
             "tp_idx": idx,
             "labels": lbls
