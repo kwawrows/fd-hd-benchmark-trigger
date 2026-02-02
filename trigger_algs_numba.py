@@ -90,7 +90,7 @@ def apply_dbscan(window_tps, epsilon=2, min_samples=2):
     #  cluster energies
     valid = labels != -1
     if not np.any(valid):
-        return (0, 0, 0, 0), df_index, labels
+        return ((0, 0, 0, 0), df_index, labels, np.empty(0, dtype=np.int32),  np.empty(0, dtype=np.float32) )
 
     cluster_ids = np.unique(labels[valid])
     cluster_sums = np.array([adc[labels == cid].sum() for cid in cluster_ids])
@@ -102,7 +102,7 @@ def apply_dbscan(window_tps, epsilon=2, min_samples=2):
         cluster_sums.max()
     )
 
-    return summary, df_index, labels
+    return summary, df_index, labels, cluster_ids, cluster_sums
 
 
 # Helper function for getting TPC ID from TPCSet and readout_plane_id -->meant for collection only 
@@ -120,6 +120,39 @@ def mask_edge_col_channels(data, edge_cut=80):
     valid_channels = col_map[(col_map.z < col_map.z.max() - edge_cut) & (col_map.z > col_map.z.min() + edge_cut)].col_ch
 
     return data[(data.readout_view == 2) & data.channel.isin(valid_channels)]
+
+
+#helper function for computing the centroid of TPs in window 
+
+def tp_moments(ch, t, q): #channel, time_start, adc_integral 
+
+    # unweighted
+    ch_mean = ch.mean()
+    t_mean  = t.mean()
+    ch_std  = ch.std()
+    t_std   = t.std()
+
+    # weighted
+    wsum = q.sum()
+    if wsum > 0:
+        ch_wmean = np.average(ch, weights=q)
+        t_wmean = np.average(t, weights=q)
+        ch_wstd  = np.sqrt(np.average((ch - ch_wmean)**2, weights=q))
+        t_wstd  = np.sqrt(np.average((t - t_wmean)**2, weights=q))
+    else:
+        ch_wmean = t_wmean = ch_wstd = t_wstd = -999
+
+    return {
+        "ch_mean": ch_mean,
+        "t_mean": t_mean,
+        "ch_std": ch_std,
+        "t_std": t_std,
+        "ch_wmean": ch_wmean,
+        "t_wmean": t_wmean,
+        "ch_wstd": ch_wstd,
+        "t_wstd": t_wstd,
+    }
+
 
 
 
@@ -142,11 +175,13 @@ def TAMaker(data,
     df = df[df.readout_view == 2].copy()
     df["time_start"] /= 32
     df["tpc"] = get_tpcid(df.TPCSetID.to_numpy(), df.readout_plane_id.to_numpy())
+    df["apa_id"] = df.TPCSetID.to_numpy() #here  
+    df["rop"] =  df.readout_plane_id.to_numpy() #here  
 
     # binning and energy estimation 
     bins = np.arange(0, 6000 + 1, window_size)
     df["bin"] = np.digitize(df["time_start"], bins) - 1
-    window_summary = (df.groupby(["event", "tpc", "bin"]).agg(total_window_energy=("adc_integral", "sum"),TP_count=("adc_integral", "size")).reset_index())
+    window_summary = (df.groupby(["event", "tpc", "bin",  "apa_id", "rop"]).agg(total_window_energy=("adc_integral", "sum"),TP_count=("adc_integral", "size")).reset_index())
 
 
     #window categorisation 
@@ -158,14 +193,21 @@ def TAMaker(data,
     window_summary = window_summary.sort_values(["event", "tpc", "bin"]).reset_index(drop=True)
     window_summary["TA_id"] = np.arange(len(window_summary)) + global_ta_offset
 
+    grouped_hits = dict(tuple(df.groupby(["event", "tpc", "bin"], sort=False)))
+
     # Immediate accept windows
     results = []
     immediate_accept = window_summary[window_summary.flag == 2]
 
     for _, row in immediate_accept.iterrows():
+        hits = grouped_hits[(row.event, row.tpc, row.bin)]
+        moments = tp_moments(ch = hits["channel"].to_numpy(), t = hits["time_start"].to_numpy(), q = hits["adc_integral"].to_numpy()) #here 
+
         results.append({
             "event": row.event,
+            "apa_id": row.apa_id, #here 
             "tpc": row.tpc,
+            "rop": row.rop, #here 
             "window_start": row.bin * window_size,
             "flag": row.flag,
             "TA_id": row.TA_id,
@@ -174,7 +216,8 @@ def TAMaker(data,
             "n_clusters": -1,
             "mean_cluster_energy": -1,
             "total_cluster_energy": -1,
-            "max_cluster_energy": -1
+            "max_cluster_energy": -1,
+            **moments #here
         })
 
     # DBSCAN for inspect windows
@@ -182,15 +225,25 @@ def TAMaker(data,
     label_records = []
 
     def process_window(row):
-        hits = df[(df.event == row.event) & (df.tpc == row.tpc) & (df.bin == row.bin)]
-        summary, idx, lbls = apply_dbscan(hits, epsilon=db_epsilon, min_samples=db_min_samples)
+        hits = grouped_hits[(row.event, row.tpc, row.bin)]
+        summary, idx, lbls, cids, csums = apply_dbscan(hits, epsilon=db_epsilon, min_samples=db_min_samples)
         n_cl, mean_cl, tot_cl, max_cl = summary
         flag = 2 if max_cl > cluster_cut else 0
+
+
+        moments = {  "ch_mean": -1, "t_mean": -1, "ch_std": -1, "t_std": -1,"ch_wmean": -1, "t_wmean": -1, "ch_wstd": -1, "t_wstd": -1, }
+
+        if n_cl > 0:
+            max_cid = cids[np.argmax(csums)]
+            sel = lbls == max_cid
+            moments = tp_moments( ch = hits["channel"].to_numpy()[sel], t = hits["time_start"].to_numpy()[sel] , q = hits["adc_integral"].to_numpy()[sel])
 
         return {
             "summary": {
                 "event": row.event,
+                "apa_id": row.apa_id, #here 
                 "tpc": row.tpc,
+                "rop": row.rop, #here 
                 "window_start": row.bin * window_size,
                 "flag": flag,
                 "TA_id": row.TA_id,
@@ -199,7 +252,8 @@ def TAMaker(data,
                 "n_clusters": n_cl,
                 "mean_cluster_energy": mean_cl,
                 "total_cluster_energy": tot_cl,
-                "max_cluster_energy": max_cl
+                "max_cluster_energy": max_cl,
+                **moments  #here 
             },
             "tp_idx": idx,
             "labels": lbls
