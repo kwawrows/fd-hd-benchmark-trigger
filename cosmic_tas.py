@@ -6,7 +6,6 @@ import utils as util
 import os
 import glob
 
-from sklearn.cluster import DBSCAN
 from tqdm import tqdm
 
 
@@ -49,23 +48,21 @@ def GenerateTAs(df, **params):
     return TPs, TAs
 
 
-base = "./beam/chunks"
-out = "./trigger_data/beam_chunks"
+base = "./cosmics/pkl/"
+out = "./trigger_data/cosmic_chunks"
 os.makedirs(out, exist_ok=True)
 
-indices = sorted({
-    int(os.path.basename(f).split("_")[-1].replace(".pkl",""))
-    for f in glob.glob(f"{base}/mc/*.pkl")
-})
+indices = sorted({ int(os.path.basename(f).split("_")[-1].replace(".pkl",""))for f in glob.glob(f"{base}/*.pkl")})
+
+print(indices)
 
 for idx in indices:
-    for part in ["nue", "numu"]:
-        mc = pd.concat([pd.read_pickle(f) for f in glob.glob(f"{base}/mc/genie_{part}_mc_{idx}.pkl")])
-        nu = pd.concat([pd.read_pickle(f) for f in glob.glob(f"{base}/nu/genie_{part}_nu_{idx}.pkl")])
-        eventsum = pd.concat([pd.read_pickle(f) for f in glob.glob(f"{base}/sum/genie_{part}_sum_{idx}.pkl")])
-        tps = pd.concat([pd.read_pickle(f) for f in glob.glob(f"{base}/tps/genie_{part}_tps_{idx}.pkl")])
+    for part in ["cosmic"]:
+        mc = pd.concat([pd.read_pickle(f) for f in glob.glob(f"{base}/{part}_mc_00{idx}.pkl")])
+        eventsum = pd.concat([pd.read_pickle(f) for f in glob.glob(f"{base}/{part}_eventsum_00{idx}.pkl")])
+        tps = pd.concat([pd.read_pickle(f) for f in glob.glob(f"{base}/{part}_tps_00{idx}.pkl")])
 
-        for df in [mc, nu, eventsum, tps]:
+        for df in [mc, eventsum, tps]:
             get_unique_event_ids(df)
             df.sort_values(by="event_uid", inplace=True)
 
@@ -77,9 +74,9 @@ for idx in indices:
         print("\n" + f"generating lateral APA efficiencies for {part} chunk {idx}")
         lTPs, lTAs = GenerateTAs(tps, **lat_params)
 
-        trig_cent = pd.merge(cTAs,eventsum[['event','run','visible_energy','event_uid']], on=['event','run'], how='right').fillna(-1)
+        trig_cent = pd.merge(cTAs,eventsum[['event','run','visible_energy','event_uid']],on=['event','run'],how='right').fillna(-1)
 
-        trig_lat = pd.merge(lTAs, eventsum[['event','run','visible_energy','event_uid']], on=['event','run'], how='right').fillna(-1)
+        trig_lat = pd.merge( lTAs, eventsum[['event','run','visible_energy','event_uid']], on=['event','run'],how='right').fillna(-1)
 
         trig_cent.to_pickle(f"{out}/{part}_TAs_cbgd_{idx}.pkl")
         trig_lat.to_pickle(f"{out}/{part}_TAs_lbgd_{idx}.pkl")
