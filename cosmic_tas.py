@@ -82,3 +82,41 @@ for idx in indices:
         trig_lat.to_pickle(f"{out}/{part}_TAs_lbgd_{idx}.pkl")
         cTPs.to_pickle(f"{out}/{part}_TPs_cbgd_{idx}.pkl")
         lTPs.to_pickle(f"{out}/{part}_TPs_lbgd_{idx}.pkl")
+
+
+from pathlib import Path
+
+folder = Path( "./trigger_data/cosmic_chunks")
+
+print("Combining trigger dfs") 
+for part in ['cosmic']:
+    for bgd in ['lbgd','cbgd']:
+        files = folder.glob(f"{part}_TAs_{bgd}*.pkl")
+
+        dfs = []
+
+        for f in files:
+            df = pd.read_pickle(f)
+            dfs.append(df)
+
+        trig_df = pd.concat(dfs, ignore_index = True)
+        trig_df.to_pickle(f"./trigger_data/cosmic_TAs_{bgd}.pkl")
+
+print("Combining summary dfs")
+
+for data_type in ['eventsum',  'mc']:
+    folder = Path("./cosmics/pkl/")
+
+    for part in ['cosmic']:
+        files = folder.glob(f"{part}_{data_type}_*")
+        dfs = []
+
+        for f in files:
+            df = pd.read_pickle(f)
+            util.get_unique_event_ids(df)
+            dfs.append(df)
+        trig_df = pd.concat(dfs, ignore_index = True)
+        trig_df.to_pickle(f"./cosmics/{part}_{data_type}.pkl")
+
+
+print("Done.")

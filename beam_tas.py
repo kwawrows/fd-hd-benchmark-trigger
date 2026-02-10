@@ -85,3 +85,40 @@ for idx in indices:
         trig_lat.to_pickle(f"{out}/{part}_TAs_lbgd_{idx}.pkl")
         cTPs.to_pickle(f"{out}/{part}_TPs_cbgd_{idx}.pkl")
         lTPs.to_pickle(f"{out}/{part}_TPs_lbgd_{idx}.pkl")
+
+
+
+print("Combining data frames")
+from pathlib import Path
+
+folder = Path( "./trigger_data/beam_chunks")
+
+for part in ['nue', 'numu']:
+    for bgd in ['lbgd','cbgd']:
+        files = folder.glob(f"{part}_TAs_{bgd}*.pkl")
+
+        dfs = []
+
+        for f in files:
+            df = pd.read_pickle(f)
+            dfs.append(df)
+
+        trig_df = pd.concat(dfs, ignore_index = True)
+        trig_df.to_pickle(f"./trigger_data/beamTAs_{part}_{bgd}.pkl")
+
+
+for data_type in ['sum', 'nu', 'mc']:
+    folder = Path(f"./beam/chunks/{data_type}")
+
+    for part in ['nue', 'numu']:
+        files = folder.glob(f"genie_{part}*")
+        dfs = []
+
+        for f in files:
+            df = pd.read_pickle(f)
+            util.get_unique_event_ids(df)
+            dfs.append(df)
+        trig_df = pd.concat(dfs, ignore_index = True)
+        trig_df.to_pickle(f"./beam/genie_{part}_{data_type}.pkl")
+
+print("Done.")
